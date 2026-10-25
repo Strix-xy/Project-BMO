@@ -1,0 +1,432 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { getEmailHealth, checkPassword } from "@/lib/authValidation";
+import { signIn, signUp } from "@/lib/authActions";
+import PasswordStrength from "./PasswordStrength";
+import { useAuth } from "@/lib/useAuth";
+
+export default function AuthModal({ isOpen, mode, onClose }) {
+  const [activeMode, setActiveMode] = useState(mode);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [status, setStatus] = useState({ type: "idle", message: "" });
+  const router = useRouter();
+  const { user } = useAuth();
+
+  const emailCheck = getEmailHealth(email);
+  const pw = checkPassword(password);
+  const confirmMatches = confirmPassword.length > 0 && password === confirmPassword;
+  const isPasswordReady = pw.valid && confirmMatches;
+  const isEmailReady = emailCheck.status === "valid";
+
+  useEffect(() => {
+    setActiveMode(mode);
+    setStatus({ type: "idle", message: "" });
+  }, [mode, isOpen]);
+
+  useEffect(() => {
+    if (!awaitingConfirmation || !user) return;
+
+    setAwaitingConfirmation(false);
+    onClose();
+    router.push("/dashboard");
+  }, [awaitingConfirmation, user, onClose, router]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleEsc = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleEsc);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleEsc);
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const isLogin = activeMode === "login";
+
+  const switchMode = (nextMode) => {
+    setActiveMode(nextMode);
+    setStatus({ type: "idle", message: "" });
+  };
+
+  const handleLogin = async () => {
+    setIsSubmitting(true);
+    setStatus({ type: "idle", message: "" });
+
+    const { error } = await signIn({ email: loginEmail, password: loginPassword });
+
+    if (error) {
+      setStatus({ type: "error", message: error.message || "Unable to sign in." });
+    } else {
+      setStatus({ type: "success", message: "Login successful." });
+      window.setTimeout(() => {
+        onClose();
+        router.push("/dashboard");
+      }, 600);
+    }
+    setIsSubmitting(false);
+  };
+
+  const handleRegister = async () => {
+    setIsSubmitting(true);
+    setAwaitingConfirmation(false);
+    setStatus({ type: "idle", message: "" });
+
+    const { data, error } = await signUp({
+      email,
+      password,
+      profile: { first_name: firstName.trim(), last_name: lastName.trim(), role: "patron" },
+    });
+
+    if (error) {
+      setStatus({ type: "error", message: error.message || "Unable to create account." });
+    } else if (data.session) {
+      setStatus({ type: "success", message: "Account created successfully." });
+      window.setTimeout(() => {
+        onClose();
+        router.push("/dashboard");
+      }, 600);
+    } else {
+      setStatus({
+        type: "success",
+        message:
+          "Check your email for the confirmation link.",
+      });
+      setAwaitingConfirmation(true);
+    }
+    setIsSubmitting(false);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/45 px-4 py-6 sm:py-8 backdrop-blur-sm overflow-y-auto"
+      onClick={onClose}
+      aria-modal="true"
+      role="dialog"
+    >
+      <div
+        className="relative w-full max-w-md overflow-hidden rounded-[1.5rem] sm:rounded-[2rem] border border-white/70 bg-[#edf2f7] shadow-[0_30px_90px_rgba(13,28,49,0.24)] my-auto max-h-[92vh] overflow-y-auto"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-surface shadow-neu-sm text-primary">
+              <span className="material-symbols-outlined text-xl">shield</span>
+            </div>
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-on-surface-variant">
+                BMO Access
+              </p>
+              <h2 className="text-lg font-bold text-on-surface">
+                {isLogin ? "Sign In" : "Create Account"}
+              </h2>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-10 w-10 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-surface shadow-neu-sm text-on-surface-variant transition-colors hover:text-primary"
+            aria-label="Close login modal"
+          >
+            <span className="material-symbols-outlined text-lg">close</span>
+          </button>
+        </div>
+
+        <div className="px-4 sm:px-6 pt-4 sm:pt-5">
+          <div className="flex rounded-full bg-surface p-1.5 shadow-neu-inset text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => switchMode("login")}
+              className={`flex-1 rounded-full px-3 py-2.5 transition-all ${
+                isLogin ? "bg-primary text-white shadow-neu-sm" : "text-on-surface-variant"
+              }`}
+            >
+              <span className="flex items-center justify-center gap-1.5">
+                <span className="material-symbols-outlined text-sm">login</span>
+                Log In
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode("register")}
+              className={`flex-1 rounded-full px-3 py-2.5 transition-all ${
+                !isLogin ? "bg-primary text-white shadow-neu-sm" : "text-on-surface-variant"
+              }`}
+            >
+              <span className="flex items-center justify-center gap-1.5">
+                <span className="material-symbols-outlined text-sm">person_add</span>
+                Register
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-4 px-4 sm:px-6 pb-5 sm:pb-6 pt-4 sm:pt-5">
+          {isLogin ? (
+            <>
+              <div className="space-y-3">
+                <label className="block text-[11px] font-mono uppercase tracking-[0.15em] text-on-surface-variant">
+                  Email
+                </label>
+                <div className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-3 shadow-neu-inset">
+                  <span className="material-symbols-outlined text-base text-primary">mail</span>
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(event) => setLoginEmail(event.target.value)}
+                    placeholder="patron.juan@bmo.gov.ph"
+                    className="w-full bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-mono uppercase tracking-[0.15em] text-on-surface-variant">
+                    Passcode
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      router.push("/forgot-password");
+                    }}
+                    className="text-[11px] font-semibold text-primary hover:underline"
+                  >
+                    Forgot?
+                  </button>
+                </div>
+                <div className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-3 shadow-neu-inset">
+                  <span className="material-symbols-outlined text-base text-primary">lock</span>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={loginPassword}
+                    onChange={(event) => setLoginPassword(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && loginEmail && loginPassword && !isSubmitting) {
+                        handleLogin();
+                      }
+                    }}
+                    placeholder="••••••••••••"
+                    className="w-full bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="text-on-surface-variant/70 hover:text-primary"
+                  >
+                    <span className="material-symbols-outlined text-base">
+                      {showPassword ? "visibility_off" : "visibility"}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {status.message ? (
+                <p className={`text-xs font-medium ${status.type === "success" ? "text-green-600" : "text-red-500"}`}>
+                  {status.message}
+                </p>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={handleLogin}
+                disabled={isSubmitting || !loginEmail || !loginPassword}
+                className="tactile-btn w-full rounded-2xl bg-gradient-to-r from-primary to-accent-cyan px-4 py-3.5 text-sm font-bold text-white shadow-neu-sm disabled:opacity-60"
+              >
+                <span className="flex items-center justify-center gap-2">
+                  {isSubmitting ? "Signing In..." : "Sign In"}
+                  <span className="material-symbols-outlined text-base">arrow_forward</span>
+                </span>
+              </button>
+
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-mono uppercase tracking-[0.15em] text-on-surface-variant">
+                    First name
+                  </label>
+                  <div className="rounded-2xl bg-surface px-4 py-3 shadow-neu-inset">
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(event) => setFirstName(event.target.value)}
+                      placeholder="Juan"
+                      className="w-full bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-mono uppercase tracking-[0.15em] text-on-surface-variant">
+                    Last name
+                  </label>
+                  <div className="rounded-2xl bg-surface px-4 py-3 shadow-neu-inset">
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(event) => setLastName(event.target.value)}
+                      placeholder="Dela Cruz"
+                      className="w-full bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] font-mono uppercase tracking-[0.15em] text-on-surface-variant">
+                  Email
+                </label>
+                <div
+                  className={`rounded-2xl bg-surface px-4 py-3 shadow-neu-inset ${
+                    email && !emailCheck.valid ? "ring-1 ring-amber-300" : ""
+                  }`}
+                >
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="juan@bmo.gov.ph"
+                    className="w-full bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none"
+                  />
+                </div>
+                {email && (
+                  <p
+                    className={`text-[10px] font-mono ${
+                      emailCheck.status === "valid" ? "text-primary" : emailCheck.status === "invalid" ? "text-red-500" : "text-amber-600"
+                    }`}
+                  >
+                    {emailCheck.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] font-mono uppercase tracking-[0.15em] text-on-surface-variant">
+                  Password
+                </label>
+                <div className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-3 shadow-neu-inset">
+                  <span className="material-symbols-outlined text-base text-primary">lock</span>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Create password"
+                    className="w-full bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="text-on-surface-variant/70 hover:text-primary"
+                  >
+                    <span className="material-symbols-outlined text-base">
+                      {showPassword ? "visibility_off" : "visibility"}
+                    </span>
+                  </button>
+                </div>
+
+                <PasswordStrength result={pw} />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] font-mono uppercase tracking-[0.15em] text-on-surface-variant">
+                  Confirm password
+                </label>
+                <div
+                  className={`flex items-center gap-3 rounded-2xl bg-surface px-4 py-3 shadow-neu-inset ${
+                    confirmPassword && !confirmMatches ? "ring-1 ring-red-300" : ""
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-base text-primary">lock_reset</span>
+                  <input
+                    type={showConfirm ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && isPasswordReady && isEmailReady && firstName && lastName && !isSubmitting) {
+                        handleRegister();
+                      }
+                    }}
+                    placeholder="Repeat password"
+                    className="w-full bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirm((value) => !value)}
+                    className="text-on-surface-variant/70 hover:text-primary"
+                  >
+                    <span className="material-symbols-outlined text-base">
+                      {showConfirm ? "visibility_off" : "visibility"}
+                    </span>
+                  </button>
+                </div>
+
+                {confirmPassword && (
+                  <p className={`text-[10px] font-mono ${confirmMatches ? "text-primary" : "text-red-500"}`}>
+                    {confirmMatches ? "Passwords match." : "Passwords do not match."}
+                  </p>
+                )}
+              </div>
+
+              <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                By creating an account you agree to the{" "}
+                <Link href="/terms" onClick={onClose} className="font-semibold text-primary hover:underline">
+                  Terms
+                </Link>{" "}
+                and{" "}
+                <Link href="/privacy" onClick={onClose} className="font-semibold text-primary hover:underline">
+                  Privacy Notice
+                </Link>
+                .
+              </p>
+
+              {status.message ? (
+                <p className={`text-xs font-medium ${status.type === "success" ? "text-green-600" : "text-red-500"}`}>
+                  {status.message}
+                </p>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={handleRegister}
+                disabled={!isPasswordReady || !isEmailReady || !firstName || !lastName || isSubmitting}
+                className={`tactile-btn w-full rounded-2xl bg-gradient-to-r from-primary to-accent-cyan px-4 py-3.5 text-sm font-bold text-white shadow-neu-sm transition-opacity ${
+                  isPasswordReady && isEmailReady && firstName && lastName && !isSubmitting ? "opacity-100" : "cursor-not-allowed opacity-50"
+                }`}
+              >
+                <span className="flex items-center justify-center gap-2">
+                  {isSubmitting ? "Creating Account..." : "Create Account"}
+                  <span className="material-symbols-outlined text-base">person_add</span>
+                </span>
+              </button>
+
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
